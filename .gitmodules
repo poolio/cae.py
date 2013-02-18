@@ -1,0 +1,3 @@
+[submodule "sfo"]
+	path = sfo
+	url = git@github.com:ganguli-lab/Sum-of-Functions-Optimizer.git
