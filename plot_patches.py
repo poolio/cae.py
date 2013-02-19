@@ -20,7 +20,7 @@ def plot_patches(W, width=None, height=None, cols=8):
         for j in xrange(cols):
             I[i*dimhp:i*dimhp+dimh, j*dimwp:j*dimwp+dimw] = W[:,i*cols+j].reshape(height, width)
 
-    plt.figure(77)
+    plt.figure()
     plt.clf()
     plt.imshow(I, cmap='gray').set_interpolation('nearest')
     plt.draw();plt.show()
