@@ -17,8 +17,10 @@ Copyright (c) 2012 Yann N. Dauphin, Salah Rifai. All rights reserved.
 
 import sys
 import os
-import numpy
+import numpy as np
 import scipy.optimize
+
+from utils import vector_from_args, args_from_vector
 
 
 class CAE(object):
@@ -67,6 +69,10 @@ class CAE(object):
         self.c = c
         self.batch_size = batch_size
         self.epochs = epochs
+        self.W = W
+        self.b = b
+        self.c = c
+
 
     def _sigmoid(self, x):
         """
@@ -80,7 +86,7 @@ class CAE(object):
         -------
         x_new: array-like, shape (M, N)
         """
-        return 1. / (1. + numpy.exp(-numpy.maximum(numpy.minimum(x, 30), -30)))
+        return 1. / (1. + np.exp(-np.maximum(np.minimum(x, 30), -30)))
 
     def encode(self, x):
         """
@@ -94,7 +100,7 @@ class CAE(object):
         -------
         h: array-like, shape (n_examples, n_hiddens)
         """
-        return self._sigmoid(numpy.dot(x, self.W) + self.b)
+        return self._sigmoid(np.dot(x, self.W) + self.b)
 
     def decode(self, h):
         """
@@ -108,7 +114,7 @@ class CAE(object):
         -------
         x: array-like, shape (n_examples, n_inputs)
         """
-        return self._sigmoid(numpy.dot(h, self.W.T) + self.c)
+        return self._sigmoid(np.dot(h, self.W.T) + self.c)
 
     def reconstruct(self, x):
         """
@@ -155,15 +161,10 @@ class CAE(object):
         y: array-like, shape (n_examples, n_inputs)
         """
         h = self.encode(x)
-        
         s = h * (1. - h)
-        
-        JJ = numpy.dot(self.W.T, self.W) * s[:, None, :] * s[:, :, None]
-        
-        alpha = numpy.random.normal(0, sigma, h.shape)
-        
+        JJ = np.dot(self.W.T, self.W) * s[:, None, :] * s[:, :, None]
+        alpha = np.random.normal(0, sigma, h.shape)
         delta = (alpha[:, :, None] * JJ).sum(1)
-        
         return self.decode(h + delta)
 
     def loss(self, x, h=None, r=None):
@@ -191,10 +192,10 @@ class CAE(object):
             Computes the error of the model with respect
             to the reconstruction (cross-entropy) cost.
             """
-            return (- (x * numpy.log(r)
-                + (1 - x) * numpy.log(1 - r)).sum(1)).sum()
-
+            return (- (x * np.log(r)
+                + (1 - x) * np.log(1 - r)).sum(1)).sum()
         def _jacobi_loss(h):
+
             """
             Computes the error of the model with respect
             the Frobenius norm of the jacobian.
@@ -204,9 +205,18 @@ class CAE(object):
         return (_reconstruction_loss(h, r)
             + self.jacobi_penalty * _jacobi_loss(h))
 
-    def _fit(self, x):
+    def get_params(self):
+        return vector_from_args([self.W, self.b, self.c])
+
+    def set_params(self, theta):
+        params = args_from_vector(theta, [self.W, self.b, self.c])
+        self.W = params[0]
+        self.b = params[1]
+        self.c = params[2]
+
+    def f_df(self, theta, x):
         """
-        Perform one step of gradient descent on the CAE objective using the
+        Compute objective and gradient of the CAE objective using the
         examples {\bf x}.
         
         Parameters
@@ -218,6 +228,7 @@ class CAE(object):
         loss: array-like, shape (n_examples,)
             Value of the loss function for each example before the step.
         """
+        self.set_params(theta)
         h = self.encode(x)
         r = self.decode(h)
         def _contraction_jacobian():
@@ -228,7 +239,7 @@ class CAE(object):
 
             d = ((1 - 2 * h) * a * (self.W**2).sum(0)[None, :])
 
-            b = numpy.dot(x.T / x.shape[0], d)
+            b = np.dot(x.T / x.shape[0], d)
 
             c = a.mean(0) * self.W
 
@@ -239,20 +250,27 @@ class CAE(object):
             Compute the gradient of the reconstruction cost w.r.t parameters.      
             """
             dr = (r - x) / x.shape[0]
-            dd = numpy.dot(dr.T, h)
-            dh = numpy.dot(dr, self.W) * h * (1. - h)
-            de = numpy.dot(x.T, dh)
+            dd = np.dot(dr.T, h)
+            dh = np.dot(dr, self.W) * h * (1. - h)
+            de = np.dot(x.T, dh)
 
             return (dd + de), dr.sum(0), dh.sum(0)
 
         W_rec, c_rec, b_rec = _reconstruction_jacobian()
         W_con, b_con = _contraction_jacobian()
-        
-        self.W -= self.learning_rate * (W_rec + self.jacobi_penalty * W_con)
-        self.b -= self.learning_rate * (b_rec + self.jacobi_penalty * b_con)
-        self.c -= self.learning_rate * c_rec
-        
-        return self.loss(x, h, r)
+        dW = W_rec + self.jacobi_penalty * W_con
+        db = b_rec + self.jacobi_penalty * b_con
+        dc = c_rec 
+        return self.loss(x, h, r), vector_from_args([dW, db, dc]);
+
+    def init_weights(self, n_input, dtype=np.float32):
+        self.W = np.asarray(np.random.uniform(
+            low=-4*np.sqrt(6./(n_input+self.n_hiddens)),
+            high=4*np.sqrt(6./(n_input+self.n_hiddens)),
+            size=(n_input, self.n_hiddens)), dtype=dtype)
+        self.b = np.zeros(self.n_hiddens, dtype=dtype)
+        self.c = np.zeros(n_input, dtype=dtype)
+
 
     def fit(self, X, verbose=False, callback=None):
         """
@@ -264,29 +282,23 @@ class CAE(object):
             Training data, where n_examples in the number of examples
             and n_inputs is the number of features.
         """
+
         if self.W == None:
-            self.W = numpy.asarray(numpy.random.uniform(
-                low=-4*numpy.sqrt(6./(X.shape[1]+self.n_hiddens)),
-                high=4*numpy.sqrt(6./(X.shape[1]+self.n_hiddens)),
-                size=(X.shape[1], self.n_hiddens)), dtype=X.dtype)
-            self.b = numpy.zeros(self.n_hiddens, dtype=X.dtype)
-            self.c = numpy.zeros(X.shape[1], dtype=X.dtype)
-        
+            self.init_weights(X.shape[1], X.dtype)
+
         inds = range(X.shape[0])
-        
-        numpy.random.shuffle(inds)
-        
+        np.random.shuffle(inds)
         n_batches = len(inds) / self.batch_size
-        
+        theta = self.get_params()
         for epoch in range(self.epochs):
             loss = 0.
             for minibatch in range(n_batches):
-                loss += self._fit(X[inds[minibatch::n_batches]])
-            
+                lossi, gradi = self.f_df(theta, X[inds[minibatch::n_batches]])
+                theta -= self.learning_rate * gradi
+                loss += lossi
             if verbose:
                 print "Epoch %d, Loss = %.2f" % (epoch, loss / len(inds))
                 sys.stdout.flush()
-            
             if callback != None:
                 callback(epoch)
 
@@ -297,4 +309,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
