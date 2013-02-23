@@ -115,7 +115,7 @@ class CAE(object):
         -------
         x: array-like, shape (n_examples, n_inputs)
         """
-        return self._sigmoid(np.dot(h, self.W.T) + self.c)
+        return (np.dot(h, self.W.T) + self.c)
 
     def reconstruct(self, x):
         """
@@ -193,9 +193,10 @@ class CAE(object):
             Computes the error of the model with respect
             to the reconstruction (cross-entropy) cost.
             """
+            # Gradient corresopnds to L2, not crossent!!!
             #return (- (x * np.log(r)
             #    + (1 - x) * np.log(1 - r)).sum(1)).sum()
-            return 2. * ((r-x)**2).sum()/x.shape[0]
+            return 1./2. * ((r-x)**2).sum()/x.shape[0]
 
         def _jacobi_loss(h):
 
