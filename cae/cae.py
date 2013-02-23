@@ -86,7 +86,8 @@ class CAE(object):
         -------
         x_new: array-like, shape (M, N)
         """
-        return 1. / (1. + np.exp(-np.maximum(np.minimum(x, 30), -30)))
+        #return 1. / (1. + np.exp(-np.maximum(np.minimum(x, 30), -30)))
+        return 1./(1.+np.exp(-x))
 
     def encode(self, x):
         """
@@ -192,8 +193,10 @@ class CAE(object):
             Computes the error of the model with respect
             to the reconstruction (cross-entropy) cost.
             """
-            return (- (x * np.log(r)
-                + (1 - x) * np.log(1 - r)).sum(1)).sum()
+            #return (- (x * np.log(r)
+            #    + (1 - x) * np.log(1 - r)).sum(1)).sum()
+            return 2. * ((r-x)**2).sum()/x.shape[0]
+
         def _jacobi_loss(h):
 
             """
@@ -236,13 +239,9 @@ class CAE(object):
             Compute the gradient of the contraction cost w.r.t parameters.
             """
             a = (h * (1 - h))**2 
-
             d = ((1 - 2 * h) * a * (self.W**2).sum(0)[None, :])
-
             b = np.dot(x.T / x.shape[0], d)
-
             c = a.mean(0) * self.W
-
             return (b + c), d.mean(0)
         
         def _reconstruction_jacobian():
@@ -270,6 +269,13 @@ class CAE(object):
             size=(n_input, self.n_hiddens)), dtype=dtype)
         self.b = np.zeros(self.n_hiddens, dtype=dtype)
         self.c = np.zeros(n_input, dtype=dtype)
+
+    def init_weights_from_data(self, X, dtype=np.float64):
+        inds = range(X.shape[0])
+        np.random.shuffle(inds)
+        self.W = (X[inds[:self.n_hiddens],:].T.astype(np.float64)).copy()
+        self.b = np.zeros(self.n_hiddens, dtype=dtype)
+        self.c = np.zeros(X.shape[1], dtype=dtype)
 
 
     def fit(self, X, verbose=False, callback=None):
