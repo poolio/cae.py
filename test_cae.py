@@ -2,10 +2,10 @@ import numpy as np
 from cae import CAE
 
 eps = 1e-6
-n_samples = 10
-n_vis = 2
-n_hid = 3
-cae = CAE(n_hiddens=n_hid, jacobi_penalty=0.0)
+n_samples = 100
+n_vis = 11
+n_hid = 12
+cae = CAE(n_hiddens=n_hid, jacobi_penalty=1.0)
 cae.init_weights(n_vis, dtype=np.float64)
 
 theta0 = cae.get_params()

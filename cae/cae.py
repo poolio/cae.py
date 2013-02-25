@@ -3,7 +3,7 @@
 """
 cae.py
 
-A pythonic library for Contractive Auto-Encoders. This is
+u pythonic library for Contractive Auto-Encoders. This is
 for people who want to give CAEs a quick try and for people
 who want to understand how they are implemented. For this
 purpose we tried to make the code as simple and clean as possible.
@@ -199,6 +199,7 @@ class CAE(object):
                     + (1 - x) * np.log(1 - r)).sum(1)).mean()
             return 1./2. * ((r-x)**2).sum()/x.shape[0]
 
+
         def _jacobi_loss(h):
 
             """
@@ -241,14 +242,14 @@ class CAE(object):
             """
             Compute the gradient of the contraction cost w.r.t parameters.
             """
-            a = (h * (1 - h))**2 
+            a = 2*(h * (1 - h))**2 
             d = ((1 - 2 * h) * a * (self.W**2).sum(0)[None, :])
        #     b = x[:,:,None] * d[:,None, :]
        #     c = a[:,None,:] * self.W
             b = np.dot(x.T / x.shape[0], d)
             c = a.mean(0) * self.W
             return (b + c), d.mean(0)
-            return (b+c).mean(0), d.mean(0)
+            #return (b+c).mean(0), d.mean(0)
         
         def _reconstruction_jacobian2():
             """                                                                 
@@ -273,11 +274,9 @@ class CAE(object):
         W_rec, c_rec, b_rec = _reconstruction_jacobian2()
         W_con, b_con = _contraction_jacobian()
         dW = W_rec + self.jacobi_penalty * W_con
-        db = b_rec + self.jacobi_penalty * b_con
-        dc = c_rec 
-        print db.shape
-        print dc.shape
-        return self.loss(x, h, r), vector_from_args([dW, db, dc]);
+        dhidbias = b_rec + self.jacobi_penalty * b_con
+        dvisbias = c_rec 
+        return self.loss(x, h, r), vector_from_args([dW, dhidbias, dvisbias]);
 
     def init_weights(self, n_input, dtype=np.float32):
         self.W = np.asarray(np.random.uniform(
