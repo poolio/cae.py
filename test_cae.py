@@ -1,16 +1,16 @@
 import numpy as np
 from cae import CAE
 
-idx = 0
-eps = 1e-5
-n_samples = 100
-n_vis = 100
-n_hid = 20
+eps = 1e-6
+n_samples = 10
+n_vis = 2
+n_hid = 3
 cae = CAE(n_hiddens=n_hid, jacobi_penalty=0.0)
-cae.init_weights(n_vis)
+cae.init_weights(n_vis, dtype=np.float64)
 
 theta0 = cae.get_params()
 relerror = np.zeros_like(theta0)
+raterror = np.zeros_like(theta0)
 
 for idx in xrange(theta0.size):
     print float(idx)/theta0.size
@@ -25,6 +25,9 @@ for idx in xrange(theta0.size):
 
     df = (f1-f0)/eps
     relerror[idx] = (df-g01[idx])/df
+    raterror[idx] = df/g01[idx]
 
 print relerror
+print raterror
 print np.max(np.abs(relerror))
+print np.max(np.abs(raterror))
