@@ -18,13 +18,14 @@ def weight_image(W, width=None, height=None, cols=None, sort=False):
     dimhp = height + 1
     dimwp = width + 1
     rows = np.int(n/cols)
-    I = np.ones((height*rows+rows-1, width*cols+cols-1))
+    mu = W.mean()
+    I = mu*np.ones((height*rows+rows-1, width*cols+cols-1))
     for i in xrange(rows):
         for j in xrange(cols):
             I[i*dimhp:i*dimhp+dimh, j*dimwp:j*dimwp+dimw] = W[:,i*cols+j].reshape(height, width)
     return I
 
-def save_weight_image(W, fn, sort=False):
+def save_weights(W, fn, sort=False):
     I = weight_image(W, sort=sort)
     plt.imsave(fn, I, cmap='gray')
 
@@ -33,8 +34,8 @@ def plot_weights(W, sort=False):
     plt.figure()
     plt.clf()
     plt.imshow(I, cmap='gray').set_interpolation('nearest')
-    plt.draw();plt.show()
     plt.axis('off')
+    plt.draw();plt.show()
 
 if __name__ == '__main__':
     import gzip
