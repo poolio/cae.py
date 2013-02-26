@@ -86,7 +86,8 @@ class CAE(object):
         -------
         x_new: array-like, shape (M, N)
         """
-        return 1. / (1. + np.exp(-np.maximum(np.minimum(x, 30), -30)))
+        #return 1. / (1. + np.exp(-np.maximum(np.minimum(x, 30), -30)))
+        return 1. / (1. + np.exp(-x))
 
     def encode(self, x):
         """
