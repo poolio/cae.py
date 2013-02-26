@@ -7,9 +7,8 @@ import matplotlib.pyplot as plt
 from cae import CAE
 from sfo import SFO
 from sfo import SAG
-from plot_patches import plot_patches
-
-def fit_sgd(model, X, batch_size=20, epochs=10, learning_rate=0.1, verbose=False, callback=None):
+from visualization import plot_weights, save_weights
+def fit_sgd(model, X, batch_size=20, epochs=30, learning_rate=0.1, verbose=False, callback=None):
     inds = range(X.shape[0])
     np.random.shuffle(inds)
     n_batches = len(inds) / batch_size
@@ -20,7 +19,11 @@ def fit_sgd(model, X, batch_size=20, epochs=10, learning_rate=0.1, verbose=False
     for mb in xrange(num_batches):
         batches.append(X[mb::num_batches])
 
+    model.W /= np.sqrt((model.W**2).sum(0))
+    save_weights(model.W, 'test%d.png'%(0))
     for epoch in range(epochs):
+        #Normalize weights
+        theta = model.get_params()
         loss = 0.
         for minibatch in range(n_batches):
             idx = np.random.randint(n_batches)
@@ -28,11 +31,12 @@ def fit_sgd(model, X, batch_size=20, epochs=10, learning_rate=0.1, verbose=False
             theta -= learning_rate * gradi
             loss += lossi
         if verbose:
-            cost = model.loss(X)/X.shape[0]
-            print "Epoch %d, Approx Loss = %.2f, Loss = %.2f" % (epoch, cost, loss/X.shape[0])
+            cost = model.loss(X)
+            print "Epoch %d, Online Loss = %.2f, Loss = %.2f" % (epoch, cost, loss/n_batches)
             sys.stdout.flush()
         if callback != None:
             callback(epoch)
+        save_weights(model.W, 'test%d.png'%(epoch+1))
     return theta
 
 def fit_lbfgs(model, X, batch_size=1000, epochs=10, learning_rate=0.1, verbose=False, callback=None):
@@ -66,7 +70,7 @@ def fit_sfo(model, X, num_batches, epochs, **kwargs):
     for learning_step in range(epochs):
         x = optimizer.optimize(num_passes=1)
         #cost, grad = optimizer.full_F_dF()
-        cost = model.loss(X)/X.shape[0]
+        cost = model.loss(X)
         costs.append(cost)
         print 'Epoch %d, Loss = %.2f' % (learning_step, cost)
     return x
@@ -85,7 +89,7 @@ def fit_sag(model, X, num_batches, epochs, **kwargs):
     for learning_step in range(epochs):
         x = optimizer.optimize(num_passes=1)
         #cost, grad = optimizer.full_F_dF()
-        cost = model.loss(X)/X.shape[0]
+        cost = model.loss(X)
         costs.append(cost)
         print 'Epoch %d, Loss = %.2f' % (learning_step, cost)
     return x
@@ -99,30 +103,16 @@ def mnist_demo():
     X = f['X']
     X = X[:10000,:]
 
-    cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.0)
-    #Train SGD
-    cae.init_weights_from_data(X)
-    from pylearn2.utils import serial
-    f2 = serial.load('/home/poole/models/mnist_comp/rae.pkl')
-    #cae.W = f2.weights.eval()
-    #cae.c = f2.visbias.eval()
-    #cae.b = f2.hidbias.eval()
- #   theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True)
-    #Train SFO
-   # cae.init_weights(X.shape[1], dtype=np.float32)
-   # theta_sfo = fit_sfo(cae, X, num_batches, epochs, regularization='min', max_history_terms=2)
-    theta_lbfgs= fit_sag(cae, X, num_batches, epochs)
-    #theta_lbfgs= fit_lbfgs(cae, X, verbose=True)
-
-    # Visualize parameters
-    cae.set_params(theta_lbfgs)
-    plot_patches(cae.W), plt.title('lbfgs')
-
-    cae.set_params(theta_sfo)
-    plot_patches(cae.W), plt.title('SFO')
-
-    cae.set_params(theta_sgd)
-    plot_patches(cae.W), plt.title('SGD')
+    cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.00)
+#    cae.init_weights_from_data(X)
+    # Train SGD
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True, learning_rate=0.2)
+    plot_weights(cae.W); plt.title('SFO')
+    # Train SFO
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sfo = fit_sfo(cae, X, num_batches, epochs)
+    plot_weights(cae.W), plt.title('SGD')
 
     1/0
 
