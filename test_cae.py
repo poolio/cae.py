@@ -1,3 +1,6 @@
+#
+# Script to check the CAE gradients. Should be made more general...
+#
 import numpy as np
 from cae import CAE
 
