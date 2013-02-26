@@ -17,6 +17,7 @@ Copyright (c) 2012 Yann N. Dauphin, Salah Rifai. All rights reserved.
 
 import sys
 import os
+import numpy #XXX: remove
 import numpy as np
 import scipy.optimize
 
@@ -115,7 +116,7 @@ class CAE(object):
         -------
         x: array-like, shape (n_examples, n_inputs)
         """
-        return (np.dot(h, self.W.T) + self.visbias)
+        return self._sigmoid(np.dot(h, self.W.T) + self.visbias)
 
     def reconstruct(self, x):
         """
@@ -208,9 +209,9 @@ class CAE(object):
             """
             return ((h *(1-h))**2 *  (self.W**2).sum(0)).sum()/x.shape[0]
 
-        print 'jacobi loss=', _jacobi_loss(h)
-        return (_reconstruction_loss(h, r)
-            + self.jacobi_penalty * _jacobi_loss(h))
+        recon_loss = _reconstruction_loss(h, r)
+        jacobi_loss = _jacobi_loss(h)
+        return (recon_loss + self.jacobi_penalty * jacobi_loss)
 
     def get_params(self):
         return vector_from_args([self.W, self.hidbias, self.visbias])
@@ -244,34 +245,22 @@ class CAE(object):
             """
             a = 2*(h * (1 - h))**2 
             d = ((1 - 2 * h) * a * (self.W**2).sum(0)[None, :])
-       #     b = x[:,:,None] * d[:,None, :]
-       #     c = a[:,None,:] * self.W
             b = np.dot(x.T / x.shape[0], d)
             c = a.mean(0) * self.W
             return (b + c), d.mean(0)
-            #return (b+c).mean(0), d.mean(0)
         
-        def _reconstruction_jacobian2():
+        def _reconstruction_jacobian():
             """                                                                 
             Compute the gradient of the reconstruction cost w.r.t parameters.      
             """
             dr = (r - x) / x.shape[0]
+            dr *= r * (1-r)
             dd = np.dot(dr.T, h)
             dh = np.dot(dr, self.W) * h * (1. - h)
             de = np.dot(x.T, dh)
-            #return np.zeros_like(dd + de), np.zeros_like(dr.sum(0)), np.zeros_like(dh.sum(0))
             return (dd + de), dr.sum(0), dh.sum(0)
 
-        def _reconstruction_jacobian():
-            dedr = -( x/r - (1 - x)/(1 - r) ) 
-            a = r*(1-r)
-            b = h*(1-h)
-            od = a * dedr
-            oe = b * np.dot(od, self.W)
-            gW = x[ :, :, None]  * oe[ :, None, : ]
-            return gW.mean(0), od.mean(0), oe.mean(0)
-
-        W_rec, c_rec, b_rec = _reconstruction_jacobian2()
+        W_rec, c_rec, b_rec = _reconstruction_jacobian()
         W_con, b_con = _contraction_jacobian()
         dW = W_rec + self.jacobi_penalty * W_con
         dhidbias = b_rec + self.jacobi_penalty * b_con
