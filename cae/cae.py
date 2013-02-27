@@ -65,13 +65,13 @@ class CAE(object):
         self.jacobi_penalty = jacobi_penalty
         self.learning_rate = learning_rate
         self.W = W
-        self.b = b
-        self.c = c
-        self.batch_size = batch_size
+        self.hidbias = b
+        self.visbias = c
+        self.hidbiasatch_size = batch_size
         self.epochs = epochs
         self.W = W
-        self.b = b
-        self.c = c
+        self.hidbias = b
+        self.visbias = c
 
 
     def _sigmoid(self, x):
@@ -101,7 +101,7 @@ class CAE(object):
         -------
         h: array-like, shape (n_examples, n_hiddens)
         """
-        return self._sigmoid(np.dot(x, self.W) + self.b)
+        return self._sigmoid(np.dot(x, self.W) + self.hidbias)
 
     def decode(self, h):
         """
@@ -115,7 +115,7 @@ class CAE(object):
         -------
         x: array-like, shape (n_examples, n_inputs)
         """
-        return self._sigmoid(np.dot(h, self.W.T) + self.c)
+        return (np.dot(h, self.W.T) + self.visbias)
 
     def reconstruct(self, x):
         """
@@ -193,27 +193,32 @@ class CAE(object):
             Computes the error of the model with respect
             to the reconstruction (cross-entropy) cost.
             """
-            return (- (x * np.log(r)
-                + (1 - x) * np.log(1 - r)).sum(1)).sum()
+            # Gradient corresopnds to L2, not crossent!!!
+            if 0:
+                return (- (x * np.log(r)
+                    + (1 - x) * np.log(1 - r)).sum(1)).mean()
+            return 1./2. * ((r-x)**2).sum()/x.shape[0]
+
         def _jacobi_loss(h):
 
             """
             Computes the error of the model with respect
             the Frobenius norm of the jacobian.
             """
-            return (((h * (1 - h))**2).sum(0) * self.W**2).sum()
+            return ((h *(1-h))**2 *  (self.W**2).sum(0)).sum()/x.shape[0]
 
+        print 'jacobi loss=', _jacobi_loss(h)
         return (_reconstruction_loss(h, r)
             + self.jacobi_penalty * _jacobi_loss(h))
 
     def get_params(self):
-        return vector_from_args([self.W, self.b, self.c])
+        return vector_from_args([self.W, self.hidbias, self.visbias])
 
     def set_params(self, theta):
-        params = args_from_vector(theta, [self.W, self.b, self.c])
+        params = args_from_vector(theta, [self.W, self.hidbias, self.visbias])
         self.W = params[0]
-        self.b = params[1]
-        self.c = params[2]
+        self.hidbias = params[1]
+        self.visbias = params[2]
 
     def f_df(self, theta, x):
         """
@@ -237,16 +242,15 @@ class CAE(object):
             Compute the gradient of the contraction cost w.r.t parameters.
             """
             a = (h * (1 - h))**2 
-
             d = ((1 - 2 * h) * a * (self.W**2).sum(0)[None, :])
-
+       #     b = x[:,:,None] * d[:,None, :]
+       #     c = a[:,None,:] * self.W
             b = np.dot(x.T / x.shape[0], d)
-
             c = a.mean(0) * self.W
-
             return (b + c), d.mean(0)
+            return (b+c).mean(0), d.mean(0)
         
-        def _reconstruction_jacobian():
+        def _reconstruction_jacobian2():
             """                                                                 
             Compute the gradient of the reconstruction cost w.r.t parameters.      
             """
@@ -254,14 +258,25 @@ class CAE(object):
             dd = np.dot(dr.T, h)
             dh = np.dot(dr, self.W) * h * (1. - h)
             de = np.dot(x.T, dh)
-
+            #return np.zeros_like(dd + de), np.zeros_like(dr.sum(0)), np.zeros_like(dh.sum(0))
             return (dd + de), dr.sum(0), dh.sum(0)
 
-        W_rec, c_rec, b_rec = _reconstruction_jacobian()
+        def _reconstruction_jacobian():
+            dedr = -( x/r - (1 - x)/(1 - r) ) 
+            a = r*(1-r)
+            b = h*(1-h)
+            od = a * dedr
+            oe = b * np.dot(od, self.W)
+            gW = x[ :, :, None]  * oe[ :, None, : ]
+            return gW.mean(0), od.mean(0), oe.mean(0)
+
+        W_rec, c_rec, b_rec = _reconstruction_jacobian2()
         W_con, b_con = _contraction_jacobian()
         dW = W_rec + self.jacobi_penalty * W_con
         db = b_rec + self.jacobi_penalty * b_con
         dc = c_rec 
+        print db.shape
+        print dc.shape
         return self.loss(x, h, r), vector_from_args([dW, db, dc]);
 
     def init_weights(self, n_input, dtype=np.float32):
@@ -269,8 +284,15 @@ class CAE(object):
             low=-4*np.sqrt(6./(n_input+self.n_hiddens)),
             high=4*np.sqrt(6./(n_input+self.n_hiddens)),
             size=(n_input, self.n_hiddens)), dtype=dtype)
-        self.b = np.zeros(self.n_hiddens, dtype=dtype)
-        self.c = np.zeros(n_input, dtype=dtype)
+        self.hidbias = np.zeros(self.n_hiddens, dtype=dtype)
+        self.visbias = np.zeros(n_input, dtype=dtype)
+
+    def init_weights_from_data(self, X, dtype=np.float64):
+        inds = range(X.shape[0])
+        np.random.shuffle(inds)
+        self.W = (X[inds[:self.n_hiddens],:].T.astype(np.float64)).copy()
+        self.hidbias = np.zeros(self.n_hiddens, dtype=dtype)
+        self.visbias = np.zeros(X.shape[1], dtype=dtype)
 
 
     def fit(self, X, verbose=False, callback=None):
@@ -289,7 +311,7 @@ class CAE(object):
 
         inds = range(X.shape[0])
         np.random.shuffle(inds)
-        n_batches = len(inds) / self.batch_size
+        n_batches = len(inds) / self.hidbiasatch_size
         theta = self.get_params()
         for epoch in range(self.epochs):
             loss = 0.
