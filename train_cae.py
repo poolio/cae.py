@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from cae import CAE
 from sfo import SFO
+from sfo import SAG
 from plot_patches import plot_patches
 
 def fit_sgd(model, X, batch_size=20, epochs=10, learning_rate=0.1, verbose=False, callback=None):
@@ -13,15 +14,22 @@ def fit_sgd(model, X, batch_size=20, epochs=10, learning_rate=0.1, verbose=False
     np.random.shuffle(inds)
     n_batches = len(inds) / batch_size
     theta = model.get_params()
+
+    num_batches = X.shape[0]/batch_size
+    batches = []
+    for mb in xrange(num_batches):
+        batches.append(X[mb::num_batches])
+
     for epoch in range(epochs):
         loss = 0.
         for minibatch in range(n_batches):
-            lossi, gradi = model.f_df(theta, X[inds[minibatch::n_batches]])
+            idx = np.random.randint(n_batches)
+            lossi, gradi = model.f_df(theta, batches[idx])
             theta -= learning_rate * gradi
             loss += lossi
         if verbose:
-            true_loss = model.loss(X)/X.shape[0]
-            print "Epoch %d, True Loss = %.4f, Running Loss = %.4f" % (epoch, true_loss, loss / len(inds))
+            cost = model.loss(X)/X.shape[0]
+            print "Epoch %d, Approx Loss = %.2f, Loss = %.2f" % (epoch, cost, loss/X.shape[0])
             sys.stdout.flush()
         if callback != None:
             callback(epoch)
@@ -35,7 +43,7 @@ def fit_lbfgs(model, X, batch_size=1000, epochs=10, learning_rate=0.1, verbose=F
     theta = model.get_params()
     for epoch in range(epochs):
         for minibatch in range(n_batches):
-            print '.',
+            print '.'
             theta = fmin_l_bfgs_b(model.f_df, theta, args=(X[inds[minibatch::n_batches]],),maxfun=20)[0]
         if verbose:
             loss = model.loss(X)
@@ -73,6 +81,26 @@ def f_df_wrapper(*args, **kwargs):
     return true_f_df(*args, **kwargs)
 
 
+def fit_sag(model, X, num_batches, epochs, **kwargs):
+    xinit = model.get_params()
+    costs = []
+    # Create minibatches.
+    # XXX: might be nice to have SFO automatically call f_df with appropriate subindicies of data
+    # instead of having to incorporate that functionality into f_df (e.g. with X[idx...])
+    batches = []
+    num_batches = X.shape[0]/20
+    for mb in xrange(num_batches):
+        batches.append(X[mb::num_batches])
+    optimizer = SAG(model.f_df, xinit, batches, L=10.0)# **kwargs)
+    for learning_step in range(epochs):
+        x = optimizer.optimize(num_passes=1)
+        #cost, grad = optimizer.full_F_dF()
+        cost = model.loss(X)/X.shape[0]
+        costs.append(cost)
+        print 'Epoch %d, Loss = %.2f' % (learning_step, cost)
+    return x
+
+
 def mnist_demo():
     global plpp_hist, plpp, true_f_df
 
@@ -82,14 +110,19 @@ def mnist_demo():
     epochs = 20
     num_batches = 500
     # Load data
-    f = np.load('mnist_train.npz')
+    try:
+        f = np.load('/home/poole/mnist_train.npz')
+    except:
+        f = np.load('mnist_train.npz')
     X = f['X']
+    X = X[:10000,:]
 
     X = np.random.permutation(X)
 
     X = X[:4000]
 
     cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.0)
+
     true_f_df = cae.f_df
     cae.f_df = f_df_wrapper
     # random projections to observe learning
@@ -105,11 +138,27 @@ def mnist_demo():
     #Train SGD
     cae.init_weights(X.shape[1], X.dtype)
     theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True)
+    #theta_lbfgs= fit_sag(cae, X, num_batches, epochs)
+
+    #Train SGD
+    #cae.init_weights_from_data(X)
+    #from pylearn2.utils import serial
+    #f2 = serial.load('/home/poole/models/mnist_comp/rae.pkl')
+    #cae.W = f2.weights.eval()
+    #cae.c = f2.visbias.eval()
+    #cae.b = f2.hidbias.eval()
+ #   theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True)
+    #Train SFO
+   # cae.init_weights(X.shape[1], dtype=np.float32)
+   # theta_sfo = fit_sfo(cae, X, num_batches, epochs, regularization='min', max_history_terms=2)
     #theta_lbfgs= fit_lbfgs(cae, X, verbose=True)
     plpp_hist_sgd = plpp_hist
     plpp_hist = []
 
     # Visualize parameters
+    cae.set_params(theta_lbfgs)
+    plot_patches(cae.W), plt.title('lbfgs')
+
     cae.set_params(theta_sfo)
     plot_patches(cae.W), plt.title('SFO')
 
