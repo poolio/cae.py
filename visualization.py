@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import Image
+#import Image
 
 def weight_image(W, width=None, height=None, cols=None, sort=False):
     p, n = W.shape
