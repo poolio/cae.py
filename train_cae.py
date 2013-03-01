@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from cae import CAE
 from sfo import SFO
-from sfo import SAG
+#from sfo import SAG
 from plot_patches import plot_patches
 
 def fit_sgd(model, X, batch_size=20, epochs=10, learning_rate=0.1, verbose=False, callback=None):
@@ -108,7 +108,7 @@ def mnist_demo():
 
 
     epochs = 20
-    num_batches = 500
+    num_batches = 50
     # Load data
     try:
         f = np.load('/home/poole/mnist_train.npz')
@@ -130,14 +130,18 @@ def mnist_demo():
     plpp = np.random.randn( 4, cae.get_params().shape[0] ) / np.sqrt(cae.get_params().shape[0])
     plpp_hist = []
 
+    #Train SGD
+    cae.init_weights(X.shape[1], X.dtype)
+    theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True)
+    plpp_hist_sgd = plpp_hist
+    plpp_hist = []
     #Train SFO
     cae.init_weights(X.shape[1], X.dtype)
     theta_sfo = fit_sfo(cae, X, num_batches, epochs)
     plpp_hist_sfo = plpp_hist
     plpp_hist = []
-    #Train SGD
-    cae.init_weights(X.shape[1], X.dtype)
-    theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True)
+
+
     #theta_lbfgs= fit_sag(cae, X, num_batches, epochs)
 
     #Train SGD
@@ -152,12 +156,10 @@ def mnist_demo():
    # cae.init_weights(X.shape[1], dtype=np.float32)
    # theta_sfo = fit_sfo(cae, X, num_batches, epochs, regularization='min', max_history_terms=2)
     #theta_lbfgs= fit_lbfgs(cae, X, verbose=True)
-    plpp_hist_sgd = plpp_hist
-    plpp_hist = []
 
     # Visualize parameters
-    cae.set_params(theta_lbfgs)
-    plot_patches(cae.W), plt.title('lbfgs')
+    #cae.set_params(theta_lbfgs)
+    #plot_patches(cae.W), plt.title('lbfgs')
 
     cae.set_params(theta_sfo)
     plot_patches(cae.W), plt.title('SFO')

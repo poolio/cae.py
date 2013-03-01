@@ -207,7 +207,7 @@ class CAE(object):
             """
             return ((h *(1-h))**2 *  (self.W**2).sum(0)).sum()/x.shape[0]
 
-        print 'jacobi loss=', _jacobi_loss(h)
+        #print 'jacobi loss=', _jacobi_loss(h)
         return (_reconstruction_loss(h, r)
             + self.jacobi_penalty * _jacobi_loss(h))
 
@@ -275,8 +275,8 @@ class CAE(object):
         dW = W_rec + self.jacobi_penalty * W_con
         db = b_rec + self.jacobi_penalty * b_con
         dc = c_rec 
-        print db.shape
-        print dc.shape
+        #print db.shape
+        #print dc.shape
         return self.loss(x, h, r), vector_from_args([dW, db, dc]);
 
     def init_weights(self, n_input, dtype=np.float32):
