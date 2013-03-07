@@ -87,8 +87,8 @@ class CAE(object):
         -------
         x_new: array-like, shape (M, N)
         """
-        #return 1. / (1. + np.exp(-np.maximum(np.minimum(x, 30), -30)))
-        return 1. / (1. + np.exp(-x))
+        return 1. / (1. + np.exp(-np.maximum(np.minimum(x, 100), -100)))
+        #return 1. / (1. + np.exp(-x))
 
     def encode(self, x):
         """
@@ -269,8 +269,10 @@ class CAE(object):
 
     def init_weights(self, n_input, dtype=np.float32):
         self.W = np.asarray(np.random.uniform(
-            low=-4*np.sqrt(6./(n_input+self.n_hiddens)),
-            high=4*np.sqrt(6./(n_input+self.n_hiddens)),
+            #low=-4*np.sqrt(6./(n_input+self.n_hiddens)),
+            #high=4*np.sqrt(6./(n_input+self.n_hiddens)),
+            low=-1./np.sqrt(self.n_hiddens),
+            high=1./np.sqrt(self.n_hiddens),
             size=(n_input, self.n_hiddens)), dtype=dtype)
         self.hidbias = np.zeros(self.n_hiddens, dtype=dtype)
         self.visbias = np.zeros(n_input, dtype=dtype)

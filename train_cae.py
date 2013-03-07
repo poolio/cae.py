@@ -8,6 +8,8 @@ from cae import CAE
 from sfo import SFO
 from sfo import SAG
 from visualization import plot_weights, save_weights
+
+
 def fit_sgd(model, X, batch_size=20, epochs=30, learning_rate=0.1, verbose=False, callback=None):
 
     inds = range(X.shape[0])
@@ -72,12 +74,12 @@ def fit_sfo(model, X, num_batches, epochs, **kwargs):
     #optimizer.check_grad()
 
     for learning_step in range(epochs):
-        x = optimizer.optimize(num_passes=1)
+        theta = optimizer.optimize(num_passes=1)
         #cost, grad = optimizer.full_F_dF()
         cost = model.loss(X)
         costs.append(cost)
         print 'Epoch %d, Loss = %.4f' % (learning_step, cost)
-    return x
+    return theta
 
 
 def f_df_wrapper(*args, **kwargs):
@@ -112,8 +114,8 @@ def mnist_demo():
     np.random.seed(5432109876) # make experiments repeatable
 
 
-    epochs = 20
-    num_batches = 50
+    epochs = 10
+    num_batches = 100
     # Load data
     try:
         f = np.load('/home/poole/mnist_train.npz')
@@ -123,8 +125,6 @@ def mnist_demo():
     X = X[:10000,:]
 
     X = np.random.permutation(X)
-
-    #X = X[:4000]
 
     cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.00)
 
@@ -138,21 +138,22 @@ def mnist_demo():
     plpp = np.random.randn( 4, cae.get_params().shape[0] ) / np.sqrt(cae.get_params().shape[0])
     plpp_hist = []
 
+    #Train SFO
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sfo = fit_sfo(cae, X, num_batches, epochs)
+    plot_weights(cae.W), plt.title('SFO'), plt.draw()
+    # save and reset the history of parameter updates
+    plpp_hist_sfo = plpp_hist
+    plpp_hist = []
+
     #Train SGD
     cae.init_weights(X.shape[1], dtype=np.float64)
-    theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True, learning_rate=0.2)
-    plot_weights(cae.W), plt.title('SGD')
+    theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True, learning_rate=0.02)
+    plot_weights(cae.W), plt.title('SGD'), plt.draw()
     # save and reset the history of parameter updates
     plpp_hist_sgd = plpp_hist
     plpp_hist = []
 
-    #Train SFO
-    # Train SFO
-    cae.init_weights(X.shape[1], dtype=np.float64)
-    theta_sfo = fit_sfo(cae, X, num_batches, epochs)
-    plot_weights(cae.W); plt.title('SFO')
-    plpp_hist_sfo = plpp_hist
-    plpp_hist = []
 
     plt.figure(1004, figsize=(15,15))
     plt.clf()
