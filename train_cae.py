@@ -8,16 +8,16 @@ from cae import CAE
 from sfo import SFO
 from sfo import SAG
 from visualization import plot_weights, save_weights
+from collections import defaultdict
 
-
-def fit_sgd(model, X, batch_size=20, epochs=30, learning_rate=0.1, verbose=False, callback=None):
+def fit_sgd(model, X, num_batches=100, epochs=30, learning_rate=0.1, verbose=False, callback=None, **kwargs):
 
     inds = range(X.shape[0])
     np.random.shuffle(inds)
-    n_batches = len(inds) / batch_size
+    n_batches = num_batches #len(inds) / batch_size
     theta = model.get_params()
 
-    num_batches = X.shape[0]/batch_size
+    #num_batches = X.shape[0]/batch_size
     batches = []
     for mb in xrange(num_batches):
         batches.append(X[mb::num_batches])
@@ -30,7 +30,7 @@ def fit_sgd(model, X, batch_size=20, epochs=30, learning_rate=0.1, verbose=False
         loss = 0.
         for minibatch in range(n_batches):
             idx = np.random.randint(n_batches)
-            lossi, gradi = model.f_df(theta, batches[idx])
+            lossi, gradi = model.f_df(theta, batches[idx], **kwargs)
             theta -= learning_rate * gradi
             loss += lossi
         if verbose:
@@ -60,7 +60,7 @@ def fit_lbfgs(model, X, batch_size=1000, epochs=10, learning_rate=0.1, verbose=F
             callback(epoch)
     return theta
 
-def fit_sfo(model, X, num_batches, epochs, **kwargs):
+def fit_sfo(model, X, num_batches, epochs, kwargs_pt=None, **kwargs):
     xinit = model.get_params()
     costs = []
     # Create minibatches.
@@ -69,10 +69,12 @@ def fit_sfo(model, X, num_batches, epochs, **kwargs):
     batches = []
     for mb in xrange(num_batches):
         batches.append(X[mb::num_batches])
-    optimizer = SFO(model.f_df, xinit, batches, **kwargs)
+    print "initializing SFO"
+    optimizer = SFO(model.f_df, xinit, batches, kwargs=kwargs_pt, **kwargs)
 
     #optimizer.check_grad()
 
+    print "calling SFO"
     for learning_step in range(epochs):
         theta = optimizer.optimize(num_passes=1)
         #cost, grad = optimizer.full_F_dF()
@@ -83,9 +85,13 @@ def fit_sfo(model, X, num_batches, epochs, **kwargs):
 
 
 def f_df_wrapper(*args, **kwargs):
-    global plpp_hist, plpp, cae, true_f_df
-    plpp_hist.append( np.dot( plpp, args[0]) )
-    return true_f_df(*args, **kwargs)
+    global plpp_hist, plpp, learner_name, cae, true_f_df, f_hist
+    plpp_hist[learner_name].append( np.dot( plpp, args[0]) )
+    f_hist[learner_name].append(kwargs['model_pt'].loss(kwargs['X_pt']))
+    kk = dict(kwargs)
+    del kk['model_pt']
+    del kk['X_pt']
+    return true_f_df(*args, **kk)
 
 
 def fit_sag(model, X, num_batches, epochs, **kwargs):
@@ -108,14 +114,63 @@ def fit_sag(model, X, num_batches, epochs, **kwargs):
     return x
 
 
+def make_figures():
+    global plpp_hist, f_hist, learner_name, plpp, true_f_df
+
+
+    minf = np.inf
+    for nm in plpp_hist.keys():
+        ff = np.asarray(f_hist[nm])
+        minf2 = np.min(ff)
+        minf = np.min([minf, minf2])
+        
+    plt.figure()
+    plt.clf()
+    for nm in plpp_hist.keys():
+        ff = np.asarray(f_hist[nm])
+        ff[ff>ff[0]] = np.nan
+        plt.semilogy( ff-minf, label=nm )
+    plt.ylabel( 'Full batch objective' )
+    plt.xlabel( 'Function calls' )
+    plt.legend( loc='best' )
+    plt.suptitle( 'Objective function')
+    plt.show()
+
+    plt.figure(figsize=(15,15))
+    plt.clf()
+    for nm in plpp_hist.keys():
+        #if nm == 'sfo':
+        #    c = 'b.'
+        #else:
+        #    c = 'r.'
+
+        plpc = np.array(plpp_hist[nm]).reshape((-1,plpp.shape[0])).T
+        #print plpcc.shape
+        #print array(locind_hist).shape
+        for pii in range(plpc.shape[0]):
+            for pjj in range(plpc.shape[0]):
+                plt.subplot( plpc.shape[0], plpc.shape[0], pjj + pii*plpc.shape[0] + 1 )
+                #plt.plot( plpc[pjj,:-1], plpc[pii,:-1], c, label=nm )
+                plt.plot( plpc[pjj,:-1], plpc[pii,:-1], label=nm )
+        for pii in range(plpc.shape[0]):
+            for pjj in range(plpc.shape[0]):
+                plt.subplot( plpc.shape[0], plpc.shape[0], pjj + pii*plpc.shape[0] + 1 )
+                plt.plot( plpc[pjj,[-1]], plpc[pii,[-1]], 'yo', label="%s current"%(nm) )
+    plt.legend( loc='best' )
+    plt.suptitle( 'Full history')
+    plt.show()
+
+
+
 def mnist_demo():
-    global plpp_hist, plpp, true_f_df
+    global plpp_hist, f_hist, learner_name, plpp, true_f_df
 
     np.random.seed(5432109876) # make experiments repeatable
 
-
-    epochs = 10
+    epochs = 100
     num_batches = 100
+    #num_batches = 500
+    #num_batches = 30
     # Load data
     try:
         f = np.load('/home/poole/mnist_train.npz')
@@ -136,49 +191,89 @@ def mnist_demo():
     cae.init_weights(X.shape[1], dtype=np.float64)
 
     plpp = np.random.randn( 4, cae.get_params().shape[0] ) / np.sqrt(cae.get_params().shape[0])
-    plpp_hist = []
+    plpp_hist = defaultdict(list)
+    f_hist = defaultdict(list)
+
+
+
 
     #Train SFO
+    kwargs_pt = {'model_pt':cae, 'X_pt':X}
+
+    learner_name = 'SFO'
+    print learner_name
     cae.init_weights(X.shape[1], dtype=np.float64)
-    theta_sfo = fit_sfo(cae, X, num_batches, epochs)
-    plot_weights(cae.W), plt.title('SFO'), plt.draw()
+    theta_sfo = fit_sfo(cae, X, num_batches, epochs, kwargs_pt=kwargs_pt, natural_gradient=False, regularization = 'min')
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
+
+    learner_name = 'SFO + nat grad'
+    print learner_name
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sfo = fit_sfo(cae, X, num_batches, epochs, kwargs_pt=kwargs_pt, natural_gradient=True, regularization = 'min')
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
+
+    learner_name = 'SFO + nat grad + adapt eta'
+    print learner_name
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sfo = fit_sfo(cae, X, num_batches, epochs, kwargs_pt=kwargs_pt, natural_gradient=True, regularization = 'min', adapt_eta=True)
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
+
+    learner_name = 'SFO + nat grad + adapt eta + min/2'
+    print learner_name
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sfo = fit_sfo(cae, X, num_batches, epochs, kwargs_pt=kwargs_pt, natural_gradient=True, regularization = 'min/2', adapt_eta=True)
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
+
     # save and reset the history of parameter updates
-    plpp_hist_sfo = plpp_hist
-    plpp_hist = []
 
     #Train SGD
+    learner_name = 'SGD 2'
+    print learner_name
     cae.init_weights(X.shape[1], dtype=np.float64)
-    theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True, learning_rate=0.02)
-    plot_weights(cae.W), plt.title('SGD'), plt.draw()
-    # save and reset the history of parameter updates
-    plpp_hist_sgd = plpp_hist
-    plpp_hist = []
+    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=2., model_pt=cae, X_pt=X)
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
 
+    learner_name = 'SGD 1'
+    print learner_name
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=1., model_pt=cae, X_pt=X)
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
 
-    plt.figure(1004, figsize=(15,15))
-    plt.clf()
-    for nm in ('sfo', 'sgd'):
-        if nm == 'sfo':
-            plpp_hist = plpp_hist_sfo
-            c = 'b.'
-        else:
-            plpp_hist = plpp_hist_sgd
-            c = 'r.'
+    learner_name = 'SGD 0.5'
+    print learner_name
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=0.5, model_pt=cae, X_pt=X)
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
 
-        plpc = np.array(plpp_hist).reshape((-1,plpp.shape[0])).T
-        #print plpcc.shape
-        #print array(locind_hist).shape
-        for pii in range(plpc.shape[0]):
-            for pjj in range(plpc.shape[0]):
-                plt.subplot( plpc.shape[0], plpc.shape[0], pjj + pii*plpc.shape[0] + 1 )
-                plt.plot( plpc[pjj,:-1], plpc[pii,:-1], c, label=nm )
-        for pii in range(plpc.shape[0]):
-            for pjj in range(plpc.shape[0]):
-                plt.subplot( plpc.shape[0], plpc.shape[0], pjj + pii*plpc.shape[0] + 1 )
-                plt.plot( plpc[pjj,[-1]], plpc[pii,[-1]], 'yo', label="%s current"%(nm) )
-    plt.legend( loc='best' )
-    plt.suptitle( 'Full history')
-    plt.show()
+    learner_name = 'SGD 0.25'
+    print learner_name
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=0.25, model_pt=cae, X_pt=X)
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
+
+    learner_name = 'SGD 0.125'
+    print learner_name
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=0.125, model_pt=cae, X_pt=X)
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
+
+    learner_name = 'SGD 0.0625'
+    print learner_name
+    cae.init_weights(X.shape[1], dtype=np.float64)
+    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=0.0625, model_pt=cae, X_pt=X)
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
+
+    1./0
     
 if __name__ == '__main__':
     mnist_demo()
