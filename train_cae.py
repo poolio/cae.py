@@ -10,8 +10,65 @@ from sfo import SAG
 from visualization import plot_weights, save_weights
 from collections import defaultdict
 
-def fit_sgd(model, X, num_batches=100, epochs=30, learning_rate=0.1, verbose=False, callback=None, **kwargs):
+from model_gradient import ModelGradient
 
+
+def fit_adagrad(model, X, batch_size=100, epochs=30, learning_rate=0.1, verbose=False, callback=None):
+    inds = range(X.shape[0])
+    np.random.shuffle(inds)
+    n_batches = len(inds) / batch_size
+    theta = model.get_params()
+
+    num_batches = X.shape[0]/batch_size
+    batches = []
+    for mb in xrange(num_batches):
+        batches.append(X[mb::num_batches])
+
+    #model.W /= np.sqrt((model.W**2).sum(0))
+    #save_weights(model.W, 'test%d.png'%(0))
+
+    thresh = 3.
+
+    reps = 1
+    grad_history = np.ones_like(theta)
+    K=5
+    P = np.random.randn(K, theta.size)
+    Ptheta = np.zeros((K, epochs*n_batches))
+    for epoch in range(epochs):
+        #Normalize weights
+        #theta = model.get_params()
+        loss = 0.
+        for minibatch in range(n_batches):
+            idx = np.random.randint(n_batches)
+            gradii = np.zeros_like(theta)
+            lossii = 0.
+            for i in xrange(reps):
+                lossi, gradi = model.f_df(theta, batches[idx])
+                lossii+= lossi / reps
+                gradii += gradi / reps
+
+            learning_rates = learning_rate / (np.sqrt(grad_history))
+            learning_rates[np.isinf(learning_rates)] = learning_rate
+            theta -= learning_rates * gradii
+            #print 'largest step=', np.max(np.abs(learning_rates*gradii))
+#            theta[theta > thresh] = thresh
+#            theta[theta < -thresh] = -thresh
+            #print 'largest theta = ', np.max(np.abs(theta)), 'largest lr', np.max(learning_rates), 'min hist', np.min(grad_history)
+            grad_history += gradi**2
+            #print np.mean(gradi**2), np.mean(grad_history)-1
+            loss += lossii
+            Ptheta[:, epoch*n_batches+minibatch] = np.dot(P, theta)
+        if verbose:
+            cost, fff = model.f_df(theta, X)
+            print "Epoch %d, Online Loss = %.2f, Loss = %.2f" % (epoch, cost, loss/n_batches)
+            sys.stdout.flush()
+        if callback != None:
+            callback(epoch)
+        #save_weights(model.W, 'test%d.png'%(epoch+1))
+    return theta
+
+
+def fit_sgd(model, X, num_batches=100, epochs=30, learning_rate=0.1, verbose=False, callback=None, **kwargs):
     inds = range(X.shape[0])
     np.random.shuffle(inds)
     n_batches = num_batches #len(inds) / batch_size
@@ -22,11 +79,11 @@ def fit_sgd(model, X, num_batches=100, epochs=30, learning_rate=0.1, verbose=Fal
     for mb in xrange(num_batches):
         batches.append(X[mb::num_batches])
 
-    model.W /= np.sqrt((model.W**2).sum(0))
-    save_weights(model.W, 'test%d.png'%(0))
+    #model.W /= np.sqrt((model.W**2).sum(0))
+    #save_weights(model.W, 'test%d.png'%(0))
     for epoch in range(epochs):
         #Normalize weights
-        theta = model.get_params()
+    #    theta = model.get_params()
         loss = 0.
         for minibatch in range(n_batches):
             idx = np.random.randint(n_batches)
@@ -34,12 +91,12 @@ def fit_sgd(model, X, num_batches=100, epochs=30, learning_rate=0.1, verbose=Fal
             theta -= learning_rate * gradi
             loss += lossi
         if verbose:
-            cost = model.loss(X)
+            cost,gradblah = model.f_df(theta, X)
             print "Epoch %d, Online Loss = %.2f, Loss = %.2f" % (epoch, cost, loss/n_batches)
             sys.stdout.flush()
         if callback != None:
             callback(epoch)
-        save_weights(model.W, 'test%d.png'%(epoch+1))
+    #    save_weights(model.W, 'test%d.png'%(epoch+1))
     return theta
 
 def fit_lbfgs(model, X, batch_size=1000, epochs=10, learning_rate=0.1, verbose=False, callback=None):
@@ -188,8 +245,6 @@ def mnist_demo():
     np.random.seed(5432109876) # make experiments repeatable
 
     epochs = 40
-    #num_batches = 100
-    #num_batches = 500
     num_batches = 100
     # Load data
     try:
@@ -197,24 +252,31 @@ def mnist_demo():
     except:
         f = np.load('mnist_train.npz')
     X = f['X']
-    X = X[:10000,:]
+    #X = X[:10000,:]
 
     X = np.random.permutation(X)
 
-    cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.00)
+    #cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.00)
+
+    # random projections to observe learning
+    plpp = np.random.randn( 4, cae.get_params().shape[0] ) / np.sqrt(cae.get_params().shape[0])
+    plpp_hist = defaultdict(list)
+    f_hist = defaultdict(list)
+
+    #f2 = np.load('/home/poole/code/scripts/test.npz')
+    model = f2['model'].item()
+    cost = f2['cost'].item()
+    cae = ModelGradient(model, cost)
 
     # put a wrapper around the objective and gradient so can store a history
     # of parameter values
     true_f_df = cae.f_df
     cae.f_df = f_df_wrapper
-    # random projections to observe learning
-    cae.init_weights(X.shape[1], dtype=np.float64)
 
-    plpp = np.random.randn( 4, cae.get_params().shape[0] ) / np.sqrt(cae.get_params().shape[0])
-    plpp_hist = defaultdict(list)
-    f_hist = defaultdict(list)
-
-
+    init_cae(cae, X)
+    theta_sgd = fit_adagrad(cae, X, epochs=epochs, verbose=True, learning_rate=0.2, batch_size=20)
+    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    make_figures()
 
 
     #Train SFO
@@ -243,44 +305,14 @@ def mnist_demo():
     # save and reset the history of parameter updates
 
     #Train SGD
-    learner_name = 'SGD 2'
-    print learner_name
-    init_cae(cae, X)
-    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=2., model_pt=cae, X_pt=X)
-    plot_weights(cae.W), plt.title(learner_name), plt.draw()
+    learning_rates = (0.05, 0.1, 0.2, 0.4, 0.8, 1.6,)
 
-    learner_name = 'SGD 1'
-    print learner_name
-    init_cae(cae, X)
-    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=1., model_pt=cae, X_pt=X)
-    plot_weights(cae.W), plt.title(learner_name), plt.draw()
-
-    learner_name = 'SGD 0.5'
-    print learner_name
-    init_cae(cae, X)
-    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=0.5, model_pt=cae, X_pt=X)
-    plot_weights(cae.W), plt.title(learner_name), plt.draw()
-
-    learner_name = 'SGD 0.25'
-    print learner_name
-    init_cae(cae, X)
-    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=0.25, model_pt=cae, X_pt=X)
-    plot_weights(cae.W), plt.title(learner_name), plt.draw()
-
-    learner_name = 'SGD 0.125'
-    print learner_name
-    init_cae(cae, X)
-    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=0.125, model_pt=cae, X_pt=X)
-    plot_weights(cae.W), plt.title(learner_name), plt.draw()
-
-    learner_name = 'SGD 0.0625'
-    print learner_name
-    init_cae(cae, X)
-    theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=0.0625, model_pt=cae, X_pt=X)
-    plot_weights(cae.W), plt.title(learner_name), plt.draw()
-
-    
-    1./0
+    for learning_rate in learning_rates:
+        learner_name = "SGD %g"%learning_rate
+        print learner_name
+        init_cae(cae, X)
+        theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=2., model_pt=cae, X_pt=X)
+        plot_weights(cae.W), plt.title(learner_name), plt.draw()
     
 if __name__ == '__main__':
     mnist_demo()
