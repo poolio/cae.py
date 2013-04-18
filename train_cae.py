@@ -275,7 +275,7 @@ def mnist_demo():
         learner_name = "ADA %g"%learning_rate
         print learner_name
         init_cae(cae, X)
-        theta_sgd = fit_adagrad(cae, X, epochs=epochs, verbose=True, learning_rate=learning_rate, batch_size=20)
+        theta_sgd = fit_adagrad(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=learning_rate)
         plot_weights(cae.W), plt.title(learner_name), plt.draw()
 
     #Train SGD
@@ -283,7 +283,7 @@ def mnist_demo():
         learner_name = "SGD %g"%learning_rate
         print learner_name
         init_cae(cae, X)
-        theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=learning_rate, model_pt=cae, X_pt=X)
+        theta_sgd = fit_sgd(cae, X, num_batches=num_batches, epochs=epochs, verbose=True, learning_rate=learning_rate)
         plot_weights(cae.W), plt.title(learner_name), plt.draw()
 
     #Train SFO
