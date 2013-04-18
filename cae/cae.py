@@ -269,6 +269,8 @@ class CAE(object):
 
     def init_weights(self, n_input, dtype=np.float32):
         self.W = np.asarray(np.random.uniform(
+        #    low=-4*np.sqrt(6./np.sqrt(n_input)),
+        #    high=4*np.sqrt(6./np.sqrt(n_input)),
             low=-4*np.sqrt(6./(n_input+self.n_hiddens)),
             high=4*np.sqrt(6./(n_input+self.n_hiddens)),
             size=(n_input, self.n_hiddens)), dtype=dtype)

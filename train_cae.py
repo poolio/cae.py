@@ -160,23 +160,22 @@ def mnist_demo():
     X = f['X']
     #X = X[:10000,:]
 
-    f2 = np.load('/home/poole/code/scripts/test.npz')
-    model = f2['model'].item()
-    cost = f2['cost'].item()
-    cae = ModelGradient(model, cost)
-    #theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True, learning_rate=0.1)
-    #cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.00)
+    #f2 = np.load('/home/poole/code/scripts/test.npz')
+    #model = f2['model'].item()
+    #cost = f2['cost'].item()
+    #cae = ModelGradient(model, cost)
+    cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.00)
 #    cae.init_weights_from_data(X)
     # Train SGD
-    #cae.init_weights(X.shape[1], dtype=np.float64)
+    cae.init_weights(X.shape[1], dtype=np.float32)
     theta_sgd = fit_adagrad(cae, X, epochs=epochs, verbose=True, learning_rate=0.2, batch_size=20)
     #cae.init_weights(X.shape[1], dtype=np.float64)
     #theta_sgd = fit_sgd(cae, X, epochs=epochs, verbose=True, learning_rate=0.2)
-    plot_weights(cae.W); plt.title('SFO')
+    plot_weights(cae.W); plt.title('Adagrad')
     # Train SFO
     cae.init_weights(X.shape[1], dtype=np.float64)
     theta_sfo = fit_sfo(cae, X, num_batches, epochs)
-    plot_weights(cae.W), plt.title('SGD')
+    plot_weights(cae.W), plt.title('SFO')
 
     1/0
 
