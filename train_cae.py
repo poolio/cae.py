@@ -260,10 +260,7 @@ def mnist_demo():
     plpp_hist = defaultdict(list)
     f_hist = defaultdict(list)
 
-    f2 = np.load('/home/poole/code/scripts/test.npz')
-    model = f2['model'].item()
-    cost = f2['cost'].item()
-    cae = ModelGradient(model, cost)
+    cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.00)
 
     # put a wrapper around the objective and gradient so can store a history
     # of parameter values
