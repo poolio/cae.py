@@ -260,7 +260,7 @@ def mnist_demo():
     plpp_hist = defaultdict(list)
     f_hist = defaultdict(list)
 
-    #f2 = np.load('/home/poole/code/scripts/test.npz')
+    f2 = np.load('/home/poole/code/scripts/test.npz')
     model = f2['model'].item()
     cost = f2['cost'].item()
     cae = ModelGradient(model, cost)
