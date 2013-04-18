@@ -8,8 +8,9 @@ from sfo import SFO
 from sfo import SAG
 from visualization import plot_weights, save_weights
 from collections import defaultdict
+from cae import CAE
 
-from model_gradient import ModelGradient
+#from model_gradient import ModelGradient
 
 
 def fit_adagrad(model, X, num_batches=100, epochs=30, learning_rate=0.1, verbose=False, callback=None, **kwargs):
@@ -252,25 +253,20 @@ def mnist_demo():
     #X = X[:10000,:]
 
     X = np.random.permutation(X)
+    X_full = X.copy()
 
-    #cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.00)
+    cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.00)
+    init_cae(cae, X)
 
     # random projections to observe learning
     plpp = np.random.randn( 4, cae.get_params().shape[0] ) / np.sqrt(cae.get_params().shape[0])
     plpp_hist = defaultdict(list)
     f_hist = defaultdict(list)
 
-    cae = CAE(n_hiddens=256, W=None, c=None, b=None, jacobi_penalty=1.00)
-
     # put a wrapper around the objective and gradient so can store a history
     # of parameter values
     true_f_df = cae.f_df
     cae.f_df = f_df_wrapper
-
-    init_cae(cae, X)
-    theta_sgd = fit_adagrad(cae, X, epochs=epochs, verbose=True, learning_rate=0.2, batch_size=20)
-    plot_weights(cae.W), plt.title(learner_name), plt.draw()
-    make_figures()
 
     #Train adagrad
     #learning_rates = (0.05, 0.1, 0.2, 0.4, 0.8, 1.6,)
