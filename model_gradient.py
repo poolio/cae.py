@@ -45,20 +45,22 @@ class ModelGradient:
             loss /= batch_size
         return loss
 
-    def loss(self, theta, X):
+    def loss(self, args, X):
+        if type(args) is not list:
+            args = args_from_vector(args, self.params)
         # Reshape theta -> args
-        args = args_from_vector(theta, self.params)
         args += [X]
         # Compute gradient from args
         loss = self._loss(*args)
         return loss
 
-    def f_df(self, theta, X):
-        # Reshape theta -> args
-        args = args_from_vector(theta, self.params)
+    def f_df(self, args, X):
+        if type(args) is not list:
+            args = args_from_vector(args, self.params)
         args += [X]
         # Compute gradient from args
-        grad = vector_from_args(self.grads(*args))
+        #grad = vector_from_args(self.grads(*args))
+        grad = self.grads(*args)
         loss = self._loss(*args)
         return loss,grad
 
